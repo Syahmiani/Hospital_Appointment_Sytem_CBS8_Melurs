@@ -28,6 +28,7 @@ $filter_patient_name = $_GET['filter_patient_name'] ?? '';
 $filter_appointment_status = $_GET['filter_appointment_status'] ?? '';
 $filter_message_status = $_GET['filter_message_status'] ?? '';
 $filter_date_range = $_GET['filter_date_range'] ?? '';
+$filter_user_type = $_GET['filter_user_type'] ?? '';
 
 // Pagination parameters
 $page = max(1, intval($_GET['page'] ?? 1));
@@ -63,13 +64,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_doctor' && isset($_GET
         mysqli_stmt_close($stmt_doctor);
 
         mysqli_commit($conn);
-        header('Location: admin.php?tab=doctors&status=deleted');
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Record successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=doctors');
         exit;
 
     } catch (Exception $e) {
         mysqli_rollback($conn);
-        error_log("Doctor deletion failed: " . $e->getMessage()); 
-        header('Location: admin.php?tab=doctors&error=1');
+        error_log("Doctor deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the doctor deletion operation.'];
+        header('Location: admin.php?tab=doctors');
         exit;
     }
 }
@@ -94,13 +97,15 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_patient' && isset($_GE
         mysqli_stmt_close($stmt_mark);
 
         mysqli_commit($conn);
-        header('Location: admin.php?tab=patients&status=deleted');
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Record successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=patients');
         exit;
 
     } catch (Exception $e) {
         mysqli_rollback($conn);
-        error_log("Patient deletion failed: " . $e->getMessage()); 
-        header('Location: admin.php?tab=patients&error=2'); 
+        error_log("Patient deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the patient deletion operation.'];
+        header('Location: admin.php?tab=patients');
         exit;
     }
 }
@@ -114,20 +119,22 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_appointment' && isset(
     
     try {
         // Soft delete instead of hard delete
-        $sql_appt = "UPDATE appointment 
+        $sql_appt = "UPDATE appointment
                     SET is_deleted = 1, deleted_at = NOW(), deleted_by = ?
                     WHERE App_ID = ?";
         $stmt_appt = mysqli_prepare($conn, $sql_appt);
         mysqli_stmt_bind_param($stmt_appt, 'ii', $_SESSION['user']['user_id'], $app_id);
         mysqli_stmt_execute($stmt_appt);
         mysqli_stmt_close($stmt_appt);
-        
-        header('Location: admin.php?tab=appointments&status=deleted');
+
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Record successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=appointments');
         exit;
 
     } catch (Exception $e) {
-        error_log("Appointment deletion failed: " . $e->getMessage()); 
-        header('Location: admin.php?tab=appointments&error=3'); 
+        error_log("Appointment deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the appointment deletion operation.'];
+        header('Location: admin.php?tab=appointments');
         exit;
     }
 }
@@ -139,20 +146,50 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_medicine' && isset($_G
     $med_id = (int)$_GET['id'];
     
     try {
-        $sql_med = "UPDATE medicine 
+        $sql_med = "UPDATE medicine
                     SET is_deleted = 1, deleted_at = NOW(), deleted_by = ?
                     WHERE med_id = ?";
         $stmt_med = mysqli_prepare($conn, $sql_med);
         mysqli_stmt_bind_param($stmt_med, 'ii', $_SESSION['user']['user_id'], $med_id);
         mysqli_stmt_execute($stmt_med);
         mysqli_stmt_close($stmt_med);
-        
-        header('Location: admin.php?tab=medicines&status=deleted');
+
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Medicine successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=medicines');
         exit;
 
     } catch (Exception $e) {
-        error_log("Medicine deletion failed: " . $e->getMessage()); 
-        header('Location: admin.php?tab=medicines&error=4'); 
+        error_log("Medicine deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the medicine deletion operation.'];
+        header('Location: admin.php?tab=medicines');
+        exit;
+    }
+}
+
+// ---------------------------------------------------------------------
+// 3g. SERVICE SOFT DELETION LOGIC (Handles ?action=delete_service)
+// ---------------------------------------------------------------------
+
+if (isset($_GET['action']) && $_GET['action'] === 'delete_service' && isset($_GET['id'])) {
+    $service_id = (int)$_GET['id'];
+
+    try {
+        $sql_srv = "UPDATE services
+                    SET is_deleted = 1, deleted_at = NOW(), deleted_by = ?
+                    WHERE Service_ID = ?";
+        $stmt_srv = mysqli_prepare($conn, $sql_srv);
+        mysqli_stmt_bind_param($stmt_srv, 'ii', $_SESSION['user']['user_id'], $service_id);
+        mysqli_stmt_execute($stmt_srv);
+        mysqli_stmt_close($stmt_srv);
+
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Service successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=services');
+        exit;
+
+    } catch (Exception $e) {
+        error_log("Service deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the service deletion operation.'];
+        header('Location: admin.php?tab=services');
         exit;
     }
 }
@@ -164,24 +201,53 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_medicine' && isset($_G
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_medicine') {
     $med_name = trim($_POST['med_name']);
     $med_price = floatval($_POST['med_price']);
-    
+
     if (!empty($med_name) && $med_price > 0) {
         $sql_add = "INSERT INTO medicine (med_name, med_price) VALUES (?, ?)";
         $stmt_add = mysqli_prepare($conn, $sql_add);
         mysqli_stmt_bind_param($stmt_add, 'sd', $med_name, $med_price);
-        
+
         if (mysqli_stmt_execute($stmt_add)) {
-            header('Location: admin.php?tab=medicines&status=added');
+            $_SESSION['flash'] = ['type' => 'success', 'message' => 'Medicine successfully added.'];
+            header('Location: admin.php?tab=medicines');
             exit;
         }
         mysqli_stmt_close($stmt_add);
     }
-    header('Location: admin.php?tab=medicines&error=4');
+    $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred with the medicine operation.'];
+    header('Location: admin.php?tab=medicines');
     exit;
 }
 
 // ---------------------------------------------------------------------
-// 3e. PAYMENT STATUS UPDATE LOGIC
+// 3e. ADD NEW SERVICE LOGIC (Handles POST from add service form)
+// ---------------------------------------------------------------------
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_service') {
+    $service_name = trim($_POST['service_name']);
+    $service_price = floatval($_POST['service_price']);
+    $available = $_POST['available'];
+
+    if (!empty($service_name) && $service_price > 0 && isset($available) && ($available === '1' || $available === '0')) {
+        $sql_add = "INSERT INTO services (Service_Name, Service_Price, Available) VALUES (?, ?, ?)";
+        $stmt_add = mysqli_prepare($conn, $sql_add);
+        $available_int = intval($available);
+        mysqli_stmt_bind_param($stmt_add, 'sdi', $service_name, $service_price, $available_int);
+
+        if (mysqli_stmt_execute($stmt_add)) {
+            $_SESSION['flash'] = ['type' => 'success', 'message' => 'Service successfully added.'];
+            header('Location: admin.php?tab=services');
+            exit;
+        }
+        mysqli_stmt_close($stmt_add);
+    }
+    $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred with the service operation.'];
+    header('Location: admin.php?tab=services');
+    exit;
+}
+
+// ---------------------------------------------------------------------
+// 3f. PAYMENT STATUS UPDATE LOGIC
 // ---------------------------------------------------------------------
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_payment_status') {
@@ -226,12 +292,14 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete_contact_message' && is
         mysqli_stmt_execute($stmt_msg);
         mysqli_stmt_close($stmt_msg);
 
-        header('Location: admin.php?tab=contact_messages&status=deleted');
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'Contact message successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=contact_messages');
         exit;
 
     } catch (Exception $e) {
         error_log("Contact message deletion failed: " . $e->getMessage());
-        header('Location: admin.php?tab=contact_messages&error=5');
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the contact message deletion operation.'];
+        header('Location: admin.php?tab=contact_messages');
         exit;
     }
 }
@@ -252,15 +320,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         mysqli_stmt_bind_param($stmt_reply, 'sii', $reply, $_SESSION['user']['user_id'], $msg_id);
 
         if (mysqli_stmt_execute($stmt_reply)) {
-            header('Location: admin.php?tab=contact_messages&status=replied');
+            $_SESSION['flash'] = ['type' => 'success', 'message' => 'Reply sent successfully.'];
+            header('Location: admin.php?tab=contact_messages');
             exit;
         } else {
-            header('Location: admin.php?tab=contact_messages&error=6');
+            $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred while sending the reply.'];
+            header('Location: admin.php?tab=contact_messages');
             exit;
         }
         mysqli_stmt_close($stmt_reply);
     } else {
-        header('Location: admin.php?tab=contact_messages&error=7');
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'Invalid reply data.'];
+        header('Location: admin.php?tab=contact_messages');
+        exit;
+    }
+}
+
+// ---------------------------------------------------------------------
+// 3h. USER DELETION LOGIC (Handles ?action=delete_user)
+// ---------------------------------------------------------------------
+
+if (isset($_GET['action']) && $_GET['action'] === 'delete_user' && isset($_GET['id'])) {
+    $user_id = (int)$_GET['id'];
+    
+    try {
+        $sql_user = "UPDATE `user`
+                    SET is_deleted = 1, deleted_at = NOW(), deleted_by = ?
+                    WHERE user_id = ?";
+        $stmt_user = mysqli_prepare($conn, $sql_user);
+        mysqli_stmt_bind_param($stmt_user, 'ii', $_SESSION['user']['user_id'], $user_id);
+        mysqli_stmt_execute($stmt_user);
+        mysqli_stmt_close($stmt_user);
+
+        $_SESSION['flash'] = ['type' => 'success', 'message' => 'User successfully deleted and moved to history.'];
+        header('Location: admin.php?tab=users');
+        exit;
+
+    } catch (Exception $e) {
+        error_log("User deletion failed: " . $e->getMessage());
+        $_SESSION['flash'] = ['type' => 'error', 'message' => 'An error occurred during the user deletion operation.'];
+        header('Location: admin.php?tab=users');
         exit;
     }
 }
@@ -344,6 +443,18 @@ if ($res_pnames) {
     }
 }
 
+// Fetch DISTINCT user types for user filter
+$user_types = [];
+$qr_types = "SELECT DISTINCT user_type FROM `user` ORDER BY user_type";
+$res_types = mysqli_query($conn, $qr_types);
+if ($res_types) {
+    while ($r = mysqli_fetch_assoc($res_types)) {
+        if (!empty($r['user_type'])) {
+            $user_types[] = $r['user_type'];
+        }
+    }
+}
+
 // Fetch list of ACTIVE patients with filter
 $patients = [];
 $qr_patients = "SELECT p.patient_id, u.f_name, u.l_name, u.email, u.phone 
@@ -384,23 +495,24 @@ if ($res_statuses) {
 
 // Fetch list of ACTIVE appointments with filter
 $appointments = [];
-$qr_appts = "SELECT 
+$qr_appts = "SELECT
                 a.App_ID, a.App_Date, a.App_Time, a.symptom, a.status, a.payment_status, a.payment_proof, a.payment_time,
                 up.f_name AS patient_fname, up.l_name AS patient_lname,
                 ud.f_name AS doctor_fname, ud.l_name AS doctor_lname,
-                s.Service_Price
-            FROM 
+                COALESCE((SELECT SUM(s.Service_Price) FROM appointment_services as2 JOIN services s ON as2.Service_ID = s.Service_ID WHERE as2.App_ID = a.App_ID), 0) AS service_total,
+                COALESCE((SELECT SUM(m.med_price * p.quantity) FROM prescription p JOIN medicine m ON p.med_id = m.med_id WHERE p.App_ID = a.App_ID), 0) AS medicine_total,
+                (SELECT GROUP_CONCAT(s.Service_Name SEPARATOR ', ') FROM appointment_services as2 JOIN services s ON as2.Service_ID = s.Service_ID WHERE as2.App_ID = a.App_ID) AS services_list,
+                (SELECT GROUP_CONCAT(CONCAT(m.med_name, ' (', p.quantity, ')') SEPARATOR ', ') FROM prescription p JOIN medicine m ON p.med_id = m.med_id WHERE p.App_ID = a.App_ID) AS medicines_list
+            FROM
                 appointment a
-            JOIN 
-                patient p ON a.patient_id = p.patient_id
-            JOIN 
-                doctor d ON a.doctor_id = d.doctor_id
-            JOIN 
-                `user` up ON p.user_id = up.user_id
-            JOIN 
-                `user` ud ON d.user_id = ud.user_id
             JOIN
-                services s ON a.Service_ID = s.Service_ID
+                patient p ON a.patient_id = p.patient_id
+            JOIN
+                doctor d ON a.doctor_id = d.doctor_id
+            JOIN
+                `user` up ON p.user_id = up.user_id
+            JOIN
+                `user` ud ON d.user_id = ud.user_id
             WHERE (a.is_deleted = 0 OR a.is_deleted IS NULL)";
 if (!empty($filter_appointment_status)) {
     $qr_appts .= " AND a.status = ?";
@@ -494,14 +606,42 @@ if ($res_appt_history) {
 
 // Fetch list of ACTIVE medicines
 $medicines = [];
-$qr_medicines = "SELECT med_id, med_name, med_price 
-                 FROM medicine 
+$qr_medicines = "SELECT med_id, med_name, med_price
+                 FROM medicine
                  WHERE (is_deleted = 0 OR is_deleted IS NULL)
                  ORDER BY med_name";
 $res_medicines = mysqli_query($conn, $qr_medicines);
 if ($res_medicines) {
     while ($r = mysqli_fetch_assoc($res_medicines)) {
         $medicines[] = $r;
+    }
+}
+
+// Fetch list of ACTIVE services
+$services = [];
+$qr_services = "SELECT Service_ID, Service_Name, Service_Price, Available
+                FROM services
+                WHERE (is_deleted = 0 OR is_deleted IS NULL)
+                ORDER BY Service_Name";
+$res_services = mysqli_query($conn, $qr_services);
+if ($res_services) {
+    while ($r = mysqli_fetch_assoc($res_services)) {
+        $services[] = $r;
+    }
+}
+
+// Fetch DELETED service history
+$service_history = [];
+$qr_service_history = "SELECT s.Service_ID, s.Service_Name, s.Service_Price, s.Available, s.deleted_at,
+                              u.f_name AS deleted_by_name
+                       FROM services s
+                       LEFT JOIN `user` u ON s.deleted_by = u.user_id
+                       WHERE s.is_deleted = 1
+                       ORDER BY s.deleted_at DESC";
+$res_service_history = mysqli_query($conn, $qr_service_history);
+if ($res_service_history) {
+    while ($r = mysqli_fetch_assoc($res_service_history)) {
+        $service_history[] = $r;
     }
 }
 
@@ -542,7 +682,7 @@ if ($res_payments) {
 
 // Fetch payment history (paid appointments)
 $payment_history = [];
-$qr_payment_history = "SELECT a.App_ID, a.App_Date, a.App_Time, a.payment_proof, a.payment_time,
+$qr_payment_history = "SELECT a.App_ID, a.App_Date, a.App_Time, a.payment_time, a.payment_proof,
                        up.f_name AS patient_fname, up.l_name AS patient_lname,
                        s.Service_Price,
                        ua.f_name AS approved_by_fname
@@ -585,6 +725,29 @@ if ($res_messages) {
     }
 }
 
+// Fetch list of all users with filter by user_type
+$users = [];
+$qr_users = "SELECT user_id, f_name, l_name, email, phone, user_type FROM `user` WHERE 1=1";
+if (!empty($filter_user_type)) {
+    $qr_users .= " AND user_type = ?";
+}
+$qr_users .= " ORDER BY f_name";
+
+if (!empty($filter_user_type)) {
+    $stmt_users = mysqli_prepare($conn, $qr_users);
+    mysqli_stmt_bind_param($stmt_users, 's', $filter_user_type);
+    mysqli_stmt_execute($stmt_users);
+    $res_users = mysqli_stmt_get_result($stmt_users);
+} else {
+    $res_users = mysqli_query($conn, $qr_users);
+}
+
+if ($res_users) {
+    while ($r = mysqli_fetch_assoc($res_users)) {
+        $users[] = $r;
+    }
+}
+
 // ---------------------------------------------------------------------
 // 5. HTML OUTPUT
 // ---------------------------------------------------------------------
@@ -614,6 +777,7 @@ if ($res_messages) {
             <a href="?tab=dashboard" class="<?= $current_tab == 'dashboard' ? 'active' : '' ?>">Dashboard Overview</a>
             <a href="?tab=doctors" class="<?= $current_tab == 'doctors' ? 'active' : '' ?>">Manage Doctors</a>
             <a href="?tab=patients" class="<?= $current_tab == 'patients' ? 'active' : '' ?>">Manage Patients</a>
+            <a href="?tab=users" class="<?= $current_tab == 'users' ? 'active' : '' ?>">Manage Users</a>
             <a href="?tab=appointments" class="<?= $current_tab == 'appointments' ? 'active' : '' ?>">View Appointments</a>
             <a href="?tab=payment_verification" class="<?= $current_tab == 'payment_verification' ? 'active' : '' ?>">Payment Verification</a>
             <a href="?tab=payment_history" class="<?= $current_tab == 'payment_history' ? 'active' : '' ?>">Payment History</a>
@@ -623,10 +787,22 @@ if ($res_messages) {
             <a href="?tab=appointment_history" class="<?= $current_tab == 'appointment_history' ? 'active' : '' ?>">Appointment History</a>
             <a href="?tab=medicines" class="<?= $current_tab == 'medicines' ? 'active' : '' ?>">Manage Medicines</a>
             <a href="?tab=medicine_history" class="<?= $current_tab == 'medicine_history' ? 'active' : '' ?>">Medicine History</a>
+            <a href="?tab=services" class="<?= $current_tab == 'services' ? 'active' : '' ?>">Manage Services</a>
+            <a href="?tab=service_history" class="<?= $current_tab == 'service_history' ? 'active' : '' ?>">Service History</a>
         </div>
 
         <div class="main-content">
             <h1>Admin Dashboard - <?=ucwords(str_replace('_', ' ', $current_tab))?></h1>
+
+            <?php
+            // FLASH MESSAGE HANDLER
+            if (isset($_SESSION['flash'])) {
+                $flash = $_SESSION['flash'];
+                $alert_class = $flash['type'] === 'success' ? 'alert-success' : 'alert-error';
+                echo "<div class='alert {$alert_class}'>{$flash['message']}</div>";
+                unset($_SESSION['flash']); // Unset the message so it doesn't show again
+            }
+            ?>
 
             <?php 
             // Status/Error Messages
@@ -635,6 +811,9 @@ if ($res_messages) {
             }
             if (isset($_GET['status']) && $_GET['status'] === 'added') {
                 echo '<div class="alert alert-success">Medicine successfully added.</div>';
+            }
+            if (isset($_GET['status']) && $_GET['status'] === 'service_added') {
+                echo '<div class="alert alert-success">Service successfully added.</div>';
             }
             if (isset($_GET['status']) && $_GET['status'] === 'payment_updated') {
                 echo '<div class="alert alert-success">Payment status updated successfully.</div>';
@@ -659,6 +838,13 @@ if ($res_messages) {
             }
             if (isset($_GET['error']) && $_GET['error'] === '5') {
                 echo '<div class="alert alert-error">An error occurred during the contact message deletion operation.</div>';
+            }
+
+            // Flash Messages
+            if (isset($_SESSION['flash'])) {
+                $flash = $_SESSION['flash'];
+                echo '<div class="alert alert-' . htmlspecialchars($flash['type']) . '">' . htmlspecialchars($flash['message']) . '</div>';
+                unset($_SESSION['flash']);
             }
             if (isset($_GET['status']) && $_GET['status'] === 'replied') {
                 echo '<div class="alert alert-success">Reply sent successfully.</div>';
@@ -803,6 +989,64 @@ if ($res_messages) {
                     </tbody>
                 </table>
 
+            <?php elseif ($current_tab === 'users'): ?>
+                <h2>User Management</h2>
+                <p>List of all registered users.</p>
+                <?php $row_number = 1; ?>
+
+                <!-- Filter Bar -->
+                <form method="GET" class="filter-bar">
+                    <input type="hidden" name="tab" value="users">
+                    <label for="filter_user_type">Filter by User Type:</label>
+                    <select name="filter_user_type" id="filter_user_type">
+                        <option value="">All Types</option>
+                        <?php foreach($user_types as $type): ?>
+                            <option value="<?=htmlspecialchars($type)?>" <?=$filter_user_type === $type ? 'selected' : ''?>>
+                                <?=htmlspecialchars(ucfirst($type))?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit">Apply Filter</button>
+                    <a href="?tab=users" class="clear-btn">Clear</a>
+                </form>
+
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>User Type</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($users)): ?>
+                            <tr><td colspan="7">No user records found.</td></tr>
+                        <?php else: ?>
+                            <?php foreach($users as $usr): ?>
+                                <tr>
+                                    <td><?= $row_number ?></td>
+                                    <td><?=htmlspecialchars($usr['user_id'])?></td>
+                                    <td><?=htmlspecialchars($usr['f_name'] . ' ' . $usr['l_name'])?></td>
+                                    <td><?=htmlspecialchars($usr['email'])?></td>
+                                    <td><?=htmlspecialchars($usr['phone'])?></td>
+                                    <td><?=htmlspecialchars(ucfirst($usr['user_type']))?></td>
+                                    <td>
+                                        <a href="#" class="btn btn-sm btn-secondary">View</a>
+                                        <a href="?tab=users&action=delete_user&id=<?=htmlspecialchars($usr['user_id'])?>"
+                                          onclick="return confirm('Are you sure you want to delete this user? They will be moved to history.')"
+                                            class="btn btn-sm btn-danger">Delete</a>
+                                    </td>
+                                </tr>
+                                <?php $row_number++; ?>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+
             <?php elseif ($current_tab === 'appointments'): ?>
                 <h2>Appointment Management</h2>
                 <p>View and manage all system appointments here.</p>
@@ -834,7 +1078,9 @@ if ($res_messages) {
                             <th>Date</th>
                             <th>Time</th>
                             <th>Symptoms</th>
-                            <th>Amount</th>
+                            <th>Services</th>
+                            <th>Medicines</th>
+                            <th>Total Amount</th>
                             <th>Status</th>
                             <th>Payment Status</th>
                             <th>Action</th>
@@ -842,7 +1088,7 @@ if ($res_messages) {
                     </thead>
                     <tbody>
                         <?php if (empty($appointments)): ?>
-                            <tr><td colspan="11">No appointments found.</td></tr>
+                            <tr><td colspan="13">No appointments found.</td></tr>
                         <?php else: ?>
                             <?php foreach($appointments as $appt): ?>
                                 <tr>
@@ -853,9 +1099,11 @@ if ($res_messages) {
                                     <td><?=htmlspecialchars($appt['App_Date'])?></td>
                                     <td><?=htmlspecialchars($appt['App_Time'])?></td>
                                     <td><?=htmlspecialchars($appt['symptom'])?></td>
-                                    <td>RM <?=number_format($appt['Service_Price'], 2)?></td>
+                                    <td><?php echo htmlspecialchars($appt['services_list'] ?? 'N/A'); ?></td>
+                                    <td><?php echo htmlspecialchars($appt['medicines_list'] ?? 'N/A'); ?></td>
+                                    <td>RM <?php echo number_format(($appt['service_total'] + $appt['medicine_total']), 2); ?></td>
                                     <td>
-                                        <?php 
+                                        <?php
                                         $status_class = '';
                                         if ($appt['status'] == 'pending') $status_class = 'badge-pending';
                                         elseif ($appt['status'] == 'approved') $status_class = 'badge-approved';
@@ -870,8 +1118,8 @@ if ($res_messages) {
                                         </span>
                                     </td>
                                     <td>
-                                        <a href="?tab=appointments&action=delete_appointment&id=<?=htmlspecialchars($appt['App_ID'])?>" 
-                                            onclick="return confirm('Are you sure you want to delete appointment ID: <?=htmlspecialchars($appt['App_ID'])?>? It will be moved to history.')" 
+                                        <a href="?tab=appointments&action=delete_appointment&id=<?=htmlspecialchars($appt['App_ID'])?>"
+                                            onclick="return confirm('Are you sure you want to delete appointment ID: <?=htmlspecialchars($appt['App_ID'])?>? It will be moved to history.')"
                                             class="btn btn-sm btn-danger">Delete</a>
                                     </td>
                                 </tr>
@@ -911,13 +1159,17 @@ if ($res_messages) {
                                 </td>
                                 <td>Dr. <?=htmlspecialchars($payment['doctor_fname'].' '.$payment['doctor_lname'])?></td>
                                 <td><?=htmlspecialchars($payment['App_Date'])?> <?=htmlspecialchars($payment['App_Time'])?></td>
-                                <td>RM <?=number_format($payment['Service_Price'], 2)?></td>
-                                <td style="text-align: center !important;"> 
-                                <?php if ($payment['payment_proof']): ?>
-                                    <a href="#" onclick="openProofModal('../uploads/payments/<?=htmlspecialchars($payment['payment_proof'])?>')">View Proof</a>
-                                    <?php else: ?>
-                                              No proof uploaded
-                                    <?php endif; ?>
+<td>RM <?=number_format($payment['Service_Price'], 2)?></td>
+                                <td style="text-align: center !important;">
+                                    <div class="proof-link-container">
+                                        <?php if ($payment['payment_proof']): ?>
+                                            <div class="view-proof-container">
+                                                <a href="#" onclick="openProofModal('../uploads/payments/<?=htmlspecialchars($payment['payment_proof'])?>')">View Proof</a>
+                                            </div>
+                                        <?php else: ?>
+                                            No proof uploaded
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                                 <td><?=htmlspecialchars($payment['payment_time'])?></td>
                                 <td>
@@ -970,7 +1222,13 @@ if ($res_messages) {
                                 <td><?=htmlspecialchars($payment['App_Date'])?></td>
                                 <td>RM <?=number_format($payment['Service_Price'], 2)?></td>
                                 <td style="text-align: center !important;">
-                                    <a href="#" onclick="openProofModal('../uploads/payments/<?=htmlspecialchars($payment['payment_proof'])?>')">View Proof</a>
+                                    <div class="proof-link-container">
+                                        <?php if ($payment['payment_proof']): ?>
+                                            <a href="#" onclick="openProofModal('../uploads/payments/<?=htmlspecialchars($payment['payment_proof'])?>')">View Proof</a>
+                                        <?php else: ?>
+                                            No proof uploaded
+                                        <?php endif; ?>
+                                    </div>
                                 </td>
                                 <td><?=htmlspecialchars($payment['payment_time'])?></td>
                                 <td><?=htmlspecialchars($payment['approved_by_fname'] ?? 'N/A')?></td>
@@ -1286,6 +1544,90 @@ if ($res_messages) {
                     </tbody>
                 </table>
 
+            <?php elseif ($current_tab === 'services'): ?>
+                <h2>Service Management</h2>
+                <div class="service-add-btn">
+                    <button type="button" class="btn btn-success" onclick="document.getElementById('add-service-form').style.display='block'">+ Add New Service</button>
+                </div>
+                <div id="add-service-form" class="add-service-form">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="add_service">
+                        <label for="service_name">Service Name:</label>
+                        <input type="text" name="service_name" required>
+                        <label for="service_price">Price (RM):</label>
+                        <input type="number" step="0.01" name="service_price" required>
+                        <label for="available">Available:</label>
+                        <select name="available" required>
+                            <option value="1">Yes</option>
+                            <option value="0">No</option>
+                        </select>
+                        <button type="submit" class="btn">Add Service</button>
+                        <button type="button" onclick="document.getElementById('add-service-form').style.display='none'" class="btn btn-secondary">Cancel</button>
+                    </form>
+                </div>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Available</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($services)): ?>
+                            <tr><td colspan="5">No service records found.</td></tr>
+                        <?php else: ?>
+                            <?php foreach($services as $srv): ?>
+                                <tr>
+                                    <td><?=htmlspecialchars($srv['Service_ID'])?></td>
+                                    <td><?=htmlspecialchars($srv['Service_Name'])?></td>
+                                    <td>RM <?=number_format($srv['Service_Price'], 2)?></td>
+                                    <td><?=htmlspecialchars($srv['Available'] ? 'Yes' : 'No')?></td>
+                                    <td>
+                                        <a href="../edit_services.php?id=<?=htmlspecialchars($srv['Service_ID'])?>" class="btn btn-sm">Edit</a>
+                                        <a href="?tab=services&action=delete_service&id=<?=htmlspecialchars($srv['Service_ID'])?>"
+                                            onclick="return confirm('Are you sure you want to delete this service?')"
+                                            class="btn btn-sm btn-danger">Delete</a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+
+            <?php elseif ($current_tab === 'service_history'): ?>
+                <h2>Service Deletion History</h2>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Price</th>
+                            <th>Available</th>
+                            <th>Deleted At</th>
+                            <th>Deleted By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php if (empty($service_history)): ?>
+                            <tr><td colspan="6">No deleted service records found.</td></tr>
+                        <?php else: ?>
+                            <?php foreach($service_history as $srv): ?>
+                                <tr>
+                                    <td><?=htmlspecialchars($srv['Service_ID'])?></td>
+                                    <td><?=htmlspecialchars($srv['Service_Name'])?></td>
+                                    <td>RM <?=number_format($srv['Service_Price'], 2)?></td>
+                                    <td><?=htmlspecialchars($srv['Available'] ? 'Yes' : 'No')?></td>
+                                    <td><?=htmlspecialchars($srv['deleted_at'])?></td>
+                                    <td><?=htmlspecialchars($srv['deleted_by_name'])?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </tbody>
+                </table>
+
             <?php else: ?>
                 <p>Invalid tab selected.</p>
             <?php endif; ?>
@@ -1334,4 +1676,3 @@ if ($res_messages) {
     <script src="../theme.js"></script>
 </body>
 </html>
-                

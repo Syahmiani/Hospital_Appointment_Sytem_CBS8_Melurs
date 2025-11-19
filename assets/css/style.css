@@ -481,8 +481,8 @@ form .btn-block {
 /* Sidebar Navigation */
 .sidebar {
   width: 250px;
-  background: var(--nav-bg);
-  color: var(--text-color);
+  background: #2c3e50;
+  color: #ecf0f1;
   padding-top: 20px;
   flex-shrink: 0;
 }
@@ -490,7 +490,7 @@ form .btn-block {
 .sidebar a {
   display: block;
   padding: 15px 20px;
-  color: var(--text-color);
+  color: #ecf0f1;
   text-decoration: none;
   border-left: 5px solid transparent;
   transition: all 0.3s ease;
@@ -498,9 +498,9 @@ form .btn-block {
 
 .sidebar a:hover,
 .sidebar a.active {
-  background: var(--card-bg);
+  background: #34495e;
   border-left-color: #007BFF;
-  color: var(--text-color);
+  color: #fff;
 }
 
 /* Main Content Area */
@@ -1491,8 +1491,19 @@ html {
     border-radius: 8px;
 }
 
+#Modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    background-color: transparent;
+    width: auto;
+    height: auto;
+    display: block !important;
+}
+
 .proof-modal-content {
-    /* REMOVED: position: fixed, top, left, transform, and z-index */
     max-width: 600px;
     width: 80%;
 }

@@ -20,7 +20,6 @@ if (isset($_GET['registration_success']) && $_GET['registration_success'] == 1) 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-
     // Hash the input password with MD5 for comparison
     $hash = md5($password);
 
@@ -29,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     mysqli_stmt_bind_param($stmt, 's', $email);
     mysqli_stmt_execute($stmt);
     mysqli_stmt_bind_result($stmt, $user_id, $uemail, $stored_hash, $f_name, $user_type);
-    
+
     if (mysqli_stmt_fetch($stmt)) {
         // Compare MD5 hashes
         if ($hash === $stored_hash) {
@@ -40,8 +39,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'user_type' => $user_type
             ];
             mysqli_stmt_close($stmt);
-            // Redirect to the central dashboard router
-            header('Location: dashboard.php');
+            // Redirect based on user_type
+            if ($user_type === 'admin') {
+                header('Location: dashboard/admin.php');
+            } else {
+                header('Location: dashboard.php');
+            }
             exit;
         } else {
             $error = 'Invalid credentials';
@@ -49,7 +52,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $error = 'Invalid credentials';
     }
-    mysqli_stmt_close($stmt);
 }
 ?>
 <!DOCTYPE html>
@@ -58,7 +60,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login</title>
-    <!-- Tailwind is included for modern styling environment, though most styles are custom/transcribed -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -90,6 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <form method="post">
         <div class="form-group"><label>Email</label><input type="email" name="email" required value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"></div>
         <div class="form-group"><label>Password</label><input type="password" name="password" required></div>
+
         <button class="btn" type="submit">Log In</button>
       </form>
 

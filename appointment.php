@@ -44,10 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $status = 'pending';
     $created_at = date('Y-m-d H:i:s');
     
-    // FIX START: Set a default Service_ID as the form does not allow selection
-    // Assumes Service_ID 1 ('General Consultation') exists in the services table.
-    $service_id = 1; 
-    // FIX END
+
     
     // Basic validation
     if ($doctor_id === 0) $errors[] = 'Please select a doctor.';
@@ -55,14 +52,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($time)) $errors[] = 'Time is required.';
 
     if (empty($errors)) {
-        // FIX: Added Service_ID to the column list
-        $sql_insert = "INSERT INTO appointment (patient_id, doctor_id, Service_ID, App_Date, App_Time, symptom, status, created_at) 
+        $service_id = 1;
+        $sql_insert = "INSERT INTO appointment (patient_id, doctor_id, Service_ID, App_Date, App_Time, symptom, status, created_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
         $stmt_insert = mysqli_prepare($conn, $sql_insert);
-        
-        // FIX: Added 'i' for Service_ID and $service_id to the parameters
+
         mysqli_stmt_bind_param($stmt_insert, 'iiisssss', $patient_id, $doctor_id, $service_id, $date, $time, $symptom, $status, $created_at);
-        
+
         $inserted = mysqli_stmt_execute($stmt_insert);
         $new_appt_id = mysqli_insert_id($conn);
         mysqli_stmt_close($stmt_insert);
@@ -126,6 +122,7 @@ if (!$appt) {
       <a href="index.php">Home</a>
       <a href="dashboard/patient.php">Dashboard</a>
       <a href="logout.php" class="btn">Logout</a>
+      <button id="theme-toggle" class="btn btn-secondary theme-toggle-btn">🌙</button>
     </nav>
   </header>
 
@@ -239,6 +236,7 @@ if (!$appt) {
     &copy; <?= date('Y') ?> Hospital System. All rights reserved. | <a href="index.php">Home</a>
   </footer>
 
+  <script src="theme.js"></script>
   <script>
     function printAppointment() {
       var printContent = document.getElementById('print-container').innerHTML;

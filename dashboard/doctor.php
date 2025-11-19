@@ -32,6 +32,16 @@ if ($res_meds) {
     }
 }
 
+// Fetch available services for selection
+$available_services = [];
+$sql_services = "SELECT Service_ID, Service_Name, Service_Price FROM services ORDER BY Service_Name";
+$res_services = mysqli_query($conn, $sql_services);
+if ($res_services) {
+    while ($s = mysqli_fetch_assoc($res_services)) {
+        $available_services[] = $s;
+    }
+}
+
 // Status/Error Messages
 $success_message = '';
 $error_message = '';
@@ -54,6 +64,8 @@ if (isset($_GET['error'])) {
         $error_message = 'Error: Could not delete the appointment. Please check the ID.';
     } elseif ($_GET['error'] === 'prescription') {
         $error_message = 'Error: Could not add prescription. Please try again.';
+    } elseif ($_GET['error'] === 'services_required') {
+        $error_message = 'Error: At least one service must be selected to approve the appointment.';
     }
 }
 
@@ -63,10 +75,17 @@ if (isset($_GET['error'])) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'add_prescription') {
     $app_id = intval($_POST['app_id']);
+    $selected_services = $_POST['services'] ?? [];
     $selected_medicines = $_POST['medicines'] ?? [];
-    
+
+    // Validate that at least one service is selected
+    if (empty($selected_services)) {
+        header('Location: doctor.php?view=' . $_POST['current_view'] . '&error=services_required');
+        exit;
+    }
+
     mysqli_begin_transaction($conn);
-    
+
     try {
         // First, approve the appointment
         $sql_approve = "UPDATE appointment SET status = 'approved' WHERE App_ID = ? AND doctor_id = ?";
@@ -74,16 +93,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         mysqli_stmt_bind_param($stmt_approve, 'ii', $app_id, $doctor_id);
         mysqli_stmt_execute($stmt_approve);
         mysqli_stmt_close($stmt_approve);
-        
+
+        // Then add selected services to appointment_services table
+        if (!empty($selected_services) && is_array($selected_services)) {
+            foreach ($selected_services as $service_id) {
+                $service_id = intval($service_id);
+                if ($service_id > 0) {
+                    $sql_service = "INSERT INTO appointment_services (App_ID, Service_ID, created_at)
+                                    VALUES (?, ?, NOW())";
+                    $stmt_service = mysqli_prepare($conn, $sql_service);
+                    mysqli_stmt_bind_param($stmt_service, 'ii', $app_id, $service_id);
+                    mysqli_stmt_execute($stmt_service);
+                    mysqli_stmt_close($stmt_service);
+                }
+            }
+        }
+
         // Then add prescriptions if any medicines selected
         if (!empty($selected_medicines) && is_array($selected_medicines)) {
             foreach ($selected_medicines as $med_info) {
                 list($med_id, $quantity) = explode(':', $med_info);
                 $med_id = intval($med_id);
                 $quantity = intval($quantity);
-                
+
                 if ($med_id > 0 && $quantity > 0) {
-                    $sql_presc = "INSERT INTO prescription (App_ID, med_id, quantity, created_at) 
+                    $sql_presc = "INSERT INTO prescription (App_ID, med_id, quantity, created_at)
                                   VALUES (?, ?, ?, NOW())";
                     $stmt_presc = mysqli_prepare($conn, $sql_presc);
                     mysqli_stmt_bind_param($stmt_presc, 'iii', $app_id, $med_id, $quantity);
@@ -92,11 +126,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                 }
             }
         }
-        
+
         mysqli_commit($conn);
         header('Location: doctor.php?view=' . $_POST['current_view'] . '&status=prescription_added');
         exit;
-        
+
     } catch (Exception $e) {
         mysqli_rollback($conn);
         error_log("Prescription error: " . $e->getMessage());
@@ -509,9 +543,30 @@ function renderStatusBadge($status) {
                     <p><strong>Date:</strong> <span id="modal_app_date"></span></p>
                 </div>
                 
+                <h3>Select Services (Required):</h3>
+                <p class="optional-text">Please select at least one service for this appointment.</p>
+
+                <div id="serviceList" class="medicine-list">
+                    <?php if (empty($available_services)): ?>
+                        <p style="color:#999; text-align:center;">No services available. Contact admin to add services.</p>
+                    <?php else: ?>
+                        <?php foreach($available_services as $service): ?>
+                            <div class="medicine-item">
+                                <label>
+                                    <input type="checkbox" name="services[]" value="<?=$service['Service_ID']?>">
+                                    <span class="medicine-details">
+                                        <strong><?=htmlspecialchars($service['Service_Name'])?></strong><br>
+                                        <small>RM <?=number_format($service['Service_Price'], 2)?></small>
+                                    </span>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+
                 <h3>Select Medicines (Optional):</h3>
                 <p class="optional-text">You can approve without prescribing medicines by clicking "Approve" without selecting any.</p>
-                
+
                 <div id="medicineList" class="medicine-list">
                     <?php if (empty($available_medicines)): ?>
                         <p style="color:#999; text-align:center;">No medicines available. Contact admin to add medicines.</p>

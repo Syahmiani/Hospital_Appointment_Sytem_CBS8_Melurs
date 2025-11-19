@@ -169,6 +169,15 @@ ADD COLUMN is_deleted TINYINT(1) DEFAULT 0,
 ADD COLUMN deleted_at DATETIME NULL,
 ADD COLUMN deleted_by INT NULL;
 
+-- For services table
+ALTER TABLE services
+ADD COLUMN is_deleted TINYINT(1) DEFAULT 0,
+ADD COLUMN deleted_at DATETIME NULL,
+ADD COLUMN deleted_by INT NULL;
+
+-- For contact_messages table (add parent_id for threading)
+ALTER TABLE contact_messages ADD COLUMN parent_id INT NULL, ADD FOREIGN KEY (parent_id) REFERENCES contact_messages(id) ON DELETE CASCADE;
+
 --
 -- Table structure for table `medicine`
 --
@@ -217,3 +226,32 @@ VALUES ('Antihistamine', 12.00, 0, NULL, NULL);
 
 INSERT INTO `medicine` (med_name, med_price, is_deleted, deleted_at, deleted_by)
 VALUES ('Vitamins C', 10.99, 0, NULL, NULL);
+
+--
+-- Table structure for table `appointment_services`
+--
+CREATE TABLE IF NOT EXISTS `appointment_services` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `App_ID` INT NOT NULL,
+  `Service_ID` INT NOT NULL,
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  FOREIGN KEY (`App_ID`) REFERENCES `appointment`(`App_ID`) ON DELETE CASCADE,
+  FOREIGN KEY (`Service_ID`) REFERENCES `services`(`Service_ID`) ON DELETE CASCADE,
+  UNIQUE KEY `unique_appointment_service` (`App_ID`, `Service_ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- --------------------------------------------------------
+-- 5. Indexes for Performance Optimization
+-- --------------------------------------------------------
+
+CREATE INDEX idx_patient_user_id ON patient (user_id);
+CREATE INDEX idx_doctor_user_id ON doctor (user_id);
+CREATE INDEX idx_appointment_patient_id ON appointment (patient_id);
+CREATE INDEX idx_appointment_doctor_id ON appointment (doctor_id);
+CREATE INDEX idx_appointment_status ON appointment (status);
+CREATE INDEX idx_appointment_payment_status ON appointment (payment_status);
+CREATE INDEX idx_user_user_type ON user (user_type);
+CREATE INDEX idx_doctor_specialization ON doctor (specialization);
+CREATE INDEX idx_appointment_date ON appointment (App_Date);
+CREATE INDEX idx_contact_messages_status ON contact_messages (is_deleted);

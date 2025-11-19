@@ -147,11 +147,12 @@ if (isset($_GET['action']) && $_GET['action'] === 'delete' && isset($_GET['id'])
 
 $appts = [];
 $sql2 = "SELECT a.App_ID, a.App_Date, a.App_Time, a.symptom, a.status, a.payment_status, a.payment_proof,
-                ud.f_name AS doc_fname, ud.l_name AS doc_lname, d.specialization, s.Service_Name, s.Service_Price
+                ud.f_name AS doc_fname, ud.l_name AS doc_lname, d.specialization,
+                COALESCE((SELECT SUM(s.Service_Price) FROM appointment_services as2 JOIN services s ON as2.Service_ID = s.Service_ID WHERE as2.App_ID = a.App_ID), 0) AS service_total,
+                COALESCE((SELECT SUM(m.med_price * p.quantity) FROM prescription p JOIN medicine m ON p.med_id = m.med_id WHERE p.App_ID = a.App_ID), 0) AS medicine_total
          FROM appointment a
          JOIN doctor d ON a.doctor_id=d.doctor_id
          JOIN user ud ON d.user_id=ud.user_id
-         JOIN services s ON a.Service_ID = s.Service_ID
          WHERE a.patient_id = ? AND (a.is_deleted IS NULL OR a.is_deleted = 0)
          ORDER BY a.App_Date DESC, a.App_Time DESC";
 $stmt2 = mysqli_prepare($conn, $sql2);
@@ -171,11 +172,10 @@ mysqli_stmt_close($stmt2);
 
 $deleted_appts = [];
 $sql3 = "SELECT a.App_ID, a.App_Date, a.App_Time, a.symptom, a.status, a.deleted_at, a.payment_status,
-                ud.f_name AS doc_fname, ud.l_name AS doc_lname, d.specialization, s.Service_Name, s.Service_Price
+                ud.f_name AS doc_fname, ud.l_name AS doc_lname, d.specialization
          FROM appointment a
          JOIN doctor d ON a.doctor_id=d.doctor_id
          JOIN user ud ON d.user_id=ud.user_id
-         JOIN services s ON a.Service_ID = s.Service_ID
          WHERE a.patient_id = ? AND a.is_deleted = 1
          ORDER BY a.deleted_at DESC";
 $stmt3 = mysqli_prepare($conn, $sql3);
@@ -353,10 +353,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <th>Date</th>
                             <th>Time</th>
                             <th>Symptoms</th>
-                            <th>Service & Price</th>
                             <th>Status</th>
-                            <th>Payment Status</th>
                             <th>Prescribed Medicines</th>
+                            <th>Total Amount</th>
+                            <th>Payment Breakdown</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -369,7 +369,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                             <td><?=htmlspecialchars($a['App_Date'])?></td>
                             <td><?=htmlspecialchars($a['App_Time'])?></td>
                             <td><?=htmlspecialchars($a['symptom'])?></td>
-                            <td><?=htmlspecialchars($a['Service_Name'])?><br>RM <?=number_format($a['Service_Price'], 2)?></td>
                             <td>
                                 <?php $status = strtolower($a['status']);
                                     if ($status=='pending') echo '<span class="badge badge-pending">Pending</span>';
@@ -379,22 +378,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 ?>
                             </td>
                             <td>
-                                <span class="payment-status <?=htmlspecialchars($a['payment_status'])?>">
-                                    <?=ucfirst($a['payment_status'])?>
-                                </span>
-                            </td>
-                            <td>
                                 <?php
                                 // Fetch prescribed medicines
-                                $sql_presc = "SELECT m.med_name, m.med_price, p.quantity 
-                                              FROM prescription p 
-                                              JOIN medicine m ON p.med_id = m.med_id 
+                                $sql_presc = "SELECT m.med_name, m.med_price, p.quantity
+                                              FROM prescription p
+                                              JOIN medicine m ON p.med_id = m.med_id
                                               WHERE p.App_ID = ?";
                                 $stmt_presc = mysqli_prepare($conn, $sql_presc);
                                 mysqli_stmt_bind_param($stmt_presc, 'i', $a['App_ID']);
                                 mysqli_stmt_execute($stmt_presc);
                                 $res_presc = mysqli_stmt_get_result($stmt_presc);
-                                
+
                                 if (mysqli_num_rows($res_presc) > 0):
                                     echo '<div style="text-align:left;">';
                                     echo '<ul>';
@@ -414,14 +408,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 ?>
                             </td>
                             <td>
+                                <?php
+                                $total_amount = $a['service_total'] + $a['medicine_total'];
+                                echo '<strong class="text-success">RM' . number_format($total_amount, 2) . '</strong>';
+                                ?>
+                            </td>
+                            <td>
+                                <div style="text-align:left; font-size:0.9em;">
+                                    <div>Service: RM<?=number_format($a['service_total'], 2)?></div>
+                                    <div>Medicine: RM<?=number_format($a['medicine_total'], 2)?></div>
+                                    <div class="border-top pt-1 mt-1"><strong>Total: RM<?=number_format($total_amount, 2)?></strong></div>
+                                </div>
+                            </td>
+                            <td>
                                 <button class="btn btn-sm btn-secondary" onclick="printAppointment(<?=$a['App_ID']?>)">Print</button>
 
+                                <?php if (!empty($a['payment_proof'])): ?>
+                                    <button onclick="openViewProofModal('<?=htmlspecialchars($a['payment_proof'])?>')" class="btn btn-sm btn-info">View Proof</button>
+                                <?php endif; ?>
+
                                 <?php if ($a['payment_status'] === 'unpaid' && $a['status'] === 'approved'): ?>
-                                    <button onclick="openPaymentModal(<?=$a['App_ID']?>, <?=$a['Service_Price']?>)" class="btn btn-sm btn-success">Pay</button>
+                                    <button onclick="openPaymentModal(<?=$a['App_ID']?>, <?=$total_amount?>)" class="btn btn-sm btn-success">Pay</button>
                                 <?php elseif ($a['payment_status'] === 'pending'): ?>
                                     <span class="payment-review">Payment Under Review</span>
                                 <?php elseif ($a['payment_status'] === 'rejected'): ?>
-                                    <button onclick="openPaymentModal(<?=$a['App_ID']?>, <?=$a['Service_Price']?>)" class="btn btn-sm btn-warning">Re-upload Proof</button>
+                                    <button onclick="openPaymentModal(<?=$a['App_ID']?>, <?=$total_amount?>)" class="btn btn-sm btn-warning">Re-upload Proof</button>
                                 <?php endif; ?>
 
                                 <br><br>
@@ -438,33 +449,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
             <!-- Payment Modal -->
             <div id="paymentModal" class="payment-modal-container">
                 <div class="payment-modal-content">
-                    <h2>Payment Instructions</h2>
-                    
-                    <!-- QR Code Section - Only shows after clicking Pay -->
-                    <div class="qr-code" id="qrCodeSection">
-                        <h3>Scan QR Code to Pay</h3>
-                        <div id="qrCodeContainer">
-                            <!-- QR code will be inserted here by JavaScript -->
+                    <h2 id="modalTitle">Payment Instructions</h2>
+
+                    <!-- View Proof Section -->
+                    <div id="viewProofSection" style="display: none;">
+                        <h3>Payment Proof</h3>
+                        <div id="proofDisplay" style="text-align: center; margin: 20px 0;">
+                            <!-- Proof will be displayed here -->
                         </div>
-                        <p><strong>Amount: RM <span id="paymentAmount">0.00</span></strong></p>
-                        <p><small>After payment, take a screenshot and upload the proof below</small></p>
-                    </div>
-                    
-                    <form method="POST" enctype="multipart/form-data" id="paymentForm">
-                        <input type="hidden" name="action" value="upload_payment">
-                        <input type="hidden" name="app_id" id="modalAppId">
-                        
-                        <div class="form-group">
-                            <label for="payment_proof">Upload Payment Proof (Screenshot/Receipt):</label>
-                            <input type="file" name="payment_proof" id="payment_proof" accept=".jpg,.jpeg,.png,.gif,.pdf" required>
-                            <small>Accepted formats: JPG, PNG, GIF, PDF (Max: 5MB)</small>
-                        </div>
-                        
                         <div style="display: flex; gap: 10px; margin-top: 20px;">
-                            <button type="button" onclick="closePaymentModal()" class="btn btn-secondary">Cancel</button>
-                            <button type="submit" class="btn btn-success">Submit Payment Proof</button>
+                            <button type="button" onclick="closePaymentModal()" class="btn btn-secondary">Close</button>
                         </div>
-                    </form>
+                    </div>
+
+                    <!-- Upload Section -->
+                    <div id="uploadSection">
+                        <!-- QR Code Section - Only shows after clicking Pay -->
+                        <div class="qr-code" id="qrCodeSection">
+                            <h3>Scan QR Code to Pay</h3>
+                            <div id="qrCodeContainer">
+                                <!-- QR code will be inserted here by JavaScript -->
+                            </div>
+                            <p><strong>Amount: RM <span id="paymentAmount">0.00</span></strong></p>
+                            <p><small>After payment, take a screenshot and upload the proof below</small></p>
+                        </div>
+
+                        <form method="POST" enctype="multipart/form-data" id="paymentForm">
+                            <input type="hidden" name="action" value="upload_payment">
+                            <input type="hidden" name="app_id" id="modalAppId">
+
+                            <div class="form-group">
+                                <label for="payment_proof">Upload Payment Proof (Screenshot/Receipt):</label>
+                                <input type="file" name="payment_proof" id="payment_proof" accept=".jpg,.jpeg,.png,.gif,.pdf" required>
+                                <small>Accepted formats: JPG, PNG, GIF, PDF (Max: 5MB)</small>
+                            </div>
+
+                            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                                <button type="button" onclick="closePaymentModal()" class="btn btn-secondary">Cancel</button>
+                                <button type="submit" class="btn btn-success">Submit Payment Proof</button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -497,22 +522,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
                                 <td>Dr. <?=htmlspecialchars($a['doc_fname'].' '.$a['doc_lname'])?> (<?=htmlspecialchars($a['specialization'])?>)</td>
                                 <td><?=htmlspecialchars($a['App_Date'])?></td>
                                 <td><?=htmlspecialchars($a['App_Time'])?></td>
-                                <td><?=htmlspecialchars($a['symptom'])?></td>
-                                <td><?=htmlspecialchars($a['Service_Name'])?><br>RM <?=number_format($a['Service_Price'], 2)?></td>
-                                <td>
-                                    <?php $status = strtolower($a['status']);
-                                        if ($status=='pending') echo '<span class="badge badge-pending">Pending</span>';
-                                        if ($status=='approved') echo '<span class="badge badge-approved">Approved</span>';
-                                        if ($status=='disapproved' || $status=='cancel' || $status=='rejected') echo '<span class="badge badge-disapproved">Disapproved</span>';
-                                        if ($status=='done') echo '<span class="badge badge-done">Done</span>';
-                                    ?>
-                                </td>
-                                <td>
-                                    <span class="payment-status <?=htmlspecialchars($a['payment_status'])?>">
-                                        <?=ucfirst($a['payment_status'])?>
-                                    </span>
-                                </td>
-                                <td><?=htmlspecialchars($a['deleted_at'] ? date('d-M-Y h:i A', strtotime($a['deleted_at'])) : 'N/A')?></td>
+                            <td><?=htmlspecialchars($a['symptom'])?></td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -643,6 +653,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
         }
 
         function openPaymentModal(appId, servicePrice) {
+            // Reset modal to upload mode
+            document.getElementById('modalTitle').textContent = 'Payment Instructions';
+            document.getElementById('viewProofSection').style.display = 'none';
+            document.getElementById('uploadSection').style.display = 'block';
+
             document.getElementById('modalAppId').value = appId;
             document.getElementById('paymentAmount').textContent = servicePrice.toFixed(2);
 
@@ -690,6 +705,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
 
             qrWrapper.appendChild(qrCodeImg);
             document.getElementById('qrCodeContainer').appendChild(qrWrapper);
+            document.getElementById('paymentModal').style.display = 'block';
+        }
+
+        function openViewProofModal(proofFileName) {
+            // Set modal to view mode
+            document.getElementById('modalTitle').textContent = 'View Payment Proof';
+            document.getElementById('uploadSection').style.display = 'none';
+            document.getElementById('viewProofSection').style.display = 'block';
+
+            // Clear previous proof display
+            const proofDisplay = document.getElementById('proofDisplay');
+            proofDisplay.innerHTML = '';
+
+            // Determine file type and display accordingly
+            const fileExtension = proofFileName.split('.').pop().toLowerCase();
+            const proofPath = '../uploads/payments/' + proofFileName;
+
+            if (fileExtension === 'pdf') {
+                // Display PDF
+                const embed = document.createElement('embed');
+                embed.src = proofPath;
+                embed.type = 'application/pdf';
+                embed.width = '100%';
+                embed.height = '500px';
+                embed.style.border = '1px solid #ddd';
+                embed.style.borderRadius = '8px';
+                proofDisplay.appendChild(embed);
+            } else if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExtension)) {
+                // Display image
+                const img = document.createElement('img');
+                img.src = proofPath;
+                img.alt = 'Payment Proof';
+                img.style.maxWidth = '100%';
+                img.style.maxHeight = '500px';
+                img.style.border = '1px solid #ddd';
+                img.style.borderRadius = '8px';
+                img.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                proofDisplay.appendChild(img);
+            } else {
+                // Fallback for unsupported files
+                proofDisplay.innerHTML = '<p>Unsupported file type. Please contact support.</p>';
+            }
+
             document.getElementById('paymentModal').style.display = 'block';
         }
         
