@@ -1,27 +1,40 @@
-# Composer
+##########################
+# MAIN SECURITY IGNORE
+##########################
+
+# Composer vendor directory
 vendor/
-composer.lock
 
-# User uploads
+# User uploads (images, PDFs, documents)
 uploads/
-*.zip
-*.pdf
 
-# Logs & temp files
+# SQL database dumps
+*.sql
+
+# Credentials / config
+.env
+config.php
+database.php
+verify_db.php
+
+# Logs and temp files
 *.log
 *.tmp
 *.cache
-
-# Environment / DB config
-.env
-*.env
-database.php
-config.php
-verify_db.php
+*.bak
 
 # OS files
 Thumbs.db
 .DS_Store
 
-# XAMPP folders
-xampp/
+# Editor / IDE
+.vscode/
+*.code-workspace
+
+# Archives
+*.zip
+*.rar
+*.tar.gz
+
+# Node (if used)
+node_modules/
