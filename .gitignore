@@ -1,0 +1,27 @@
+# Composer
+vendor/
+composer.lock
+
+# User uploads
+uploads/
+*.zip
+*.pdf
+
+# Logs & temp files
+*.log
+*.tmp
+*.cache
+
+# Environment / DB config
+.env
+*.env
+database.php
+config.php
+verify_db.php
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# XAMPP folders
+xampp/
